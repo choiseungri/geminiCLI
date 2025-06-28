@@ -27,19 +27,19 @@ const frontend = spawn('npm', ['run', 'dev'], {
   shell: true
 });
 
-// Backend server (when dependencies are resolved)
-// console.log('⚙️  Starting backend development server...');
-// const backend = spawn('npm', ['run', 'dev'], {
-//   cwd: BACKEND_DIR,
-//   stdio: 'inherit',
-//   shell: true
-// });
+// Backend server
+console.log('⚙️  Starting backend development server...');
+const backend = spawn('npm', ['run', 'dev'], { // 주석 해제
+  cwd: BACKEND_DIR,
+  stdio: 'inherit',
+  shell: true
+});
 
 console.log(`
 🌟 Development servers starting...
 
 Frontend: http://localhost:5173
-Backend:  http://localhost:3001 (not yet started)
+Backend:  http://localhost:3001
 
 Press Ctrl+C to stop all servers
 `);
@@ -48,7 +48,7 @@ Press Ctrl+C to stop all servers
 process.on('SIGINT', () => {
   console.log('\n🛑 Shutting down development servers...');
   frontend.kill();
-  // backend.kill();
+  backend.kill(); // 주석 해제
   process.exit(0);
 });
 
@@ -56,6 +56,6 @@ frontend.on('close', (code) => {
   console.log(`Frontend server exited with code ${code}`);
 });
 
-// backend.on('close', (code) => {
-//   console.log(`Backend server exited with code ${code}`);
-// });
+backend.on('close', (code) => { // 주석 해제
+  console.log(`Backend server exited with code ${code}`);
+});
