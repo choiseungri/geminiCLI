@@ -6,21 +6,21 @@ interface REPLStore {
   // Current session
   currentSession: CLISession | null;
   messages: REPLMessage[];
-  
+
   // Connection state
   isConnected: boolean;
   isConnecting: boolean;
   connectionError: string | null;
-  
+
   // CLI state
   currentDirectory: string;
   availableSessions: CLISession[];
-  
+
   // UI state
   isTyping: boolean;
   currentInput: string;
   isExecutingCommand: boolean;
-  
+
   // Actions
   connectToWebSocket: (token: string) => Promise<void>;
   disconnectFromWebSocket: () => void;
@@ -53,13 +53,13 @@ export const useREPLStore = create<REPLStore>((set, get) => ({
   // WebSocket connection
   connectToWebSocket: async (token: string) => {
     set({ isConnecting: true, connectionError: null });
-    
+
     try {
       await socketService.connect(token);
-      
+
       // Set up event listeners
       socketService.on('cli:connected', (data) => {
-        set({ 
+        set({
           isConnected: true,
           currentSession: {
             id: data.sessionId,
@@ -71,10 +71,19 @@ export const useREPLStore = create<REPLStore>((set, get) => ({
           },
           currentDirectory: data.workingDirectory
         });
+        // 연결 성공 메시지 추가
+        get().addMessage({
+          type: 'system',
+          content: data.message || `Successfully connected to CLI. Session: ${data.sessionId}`,
+        });
       });
 
       socketService.on('cli:disconnected', () => {
         set({ isConnected: false, currentSession: null });
+        get().addMessage({
+          type: 'system',
+          content: 'Disconnected from CLI.',
+        });
       });
 
       socketService.on('cli:error', (error) => {
@@ -107,6 +116,12 @@ export const useREPLStore = create<REPLStore>((set, get) => ({
               content: message.content || ''
             });
           }
+        } else if (message.content) { // 일반 메시지 처리 추가
+          get().addMessage({
+            type: message.type === 'command' ? 'user' : 'assistant', // command 타입은 user로, 나머지는 assistant
+            content: message.content,
+            metadata: message.metadata
+          });
         }
       });
 
@@ -122,12 +137,21 @@ export const useREPLStore = create<REPLStore>((set, get) => ({
         });
       });
 
+      // 연결 성공 후 자동으로 cli:connect 이벤트 전송 (이전 단계에서 추가한 로직)
+      if (socketService.connected) {
+        get().connectToCLI();
+      }
+
       set({ isConnecting: false });
-      
+
     } catch (error) {
-      set({ 
-        isConnecting: false, 
-        connectionError: error instanceof Error ? error.message : 'Connection failed' 
+      set({
+        isConnecting: false,
+        connectionError: error instanceof Error ? error.message : 'Connection failed'
+      });
+      get().addMessage({
+        type: 'error',
+        content: `Failed to connect to WebSocket: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
       throw error;
     }
@@ -135,8 +159,8 @@ export const useREPLStore = create<REPLStore>((set, get) => ({
 
   disconnectFromWebSocket: () => {
     socketService.disconnect();
-    set({ 
-      isConnected: false, 
+    set({
+      isConnected: false,
       currentSession: null,
       availableSessions: [],
       connectionError: null
@@ -146,27 +170,33 @@ export const useREPLStore = create<REPLStore>((set, get) => ({
   connectToCLI: (sessionId?: string, workingDirectory?: string) => {
     if (!socketService.connected) {
       set({ connectionError: 'WebSocket not connected' });
+      get().addMessage({
+        type: 'error',
+        content: 'Cannot connect to CLI: WebSocket not connected.',
+      });
       return;
     }
-    
+
     socketService.connectToCLI(sessionId, workingDirectory);
-    get().addMessage({
-      type: 'system',
-      content: workingDirectory 
-        ? `Connecting to CLI in directory: ${workingDirectory}`
-        : 'Connecting to CLI...'
-    });
+    // cli:connect 메시지는 시스템 메시지로 즉시 표시하지 않고, cli:connected 응답을 통해 연결 상태를 업데이트
+    // get().addMessage({
+    //   type: 'system',
+    //   content: workingDirectory
+    //     ? `Attempting to connect to CLI in directory: ${workingDirectory}`
+    //     : 'Attempting to connect to CLI...'
+    // });
   },
 
   disconnectFromCLI: (sessionId?: string) => {
     if (socketService.connected) {
       socketService.disconnectFromCLI(sessionId);
     }
-    set({ currentSession: null, isConnected: false });
-    get().addMessage({
-      type: 'system',
-      content: 'Disconnected from CLI'
-    });
+    // 실제 disconnect는 cli:disconnected 이벤트를 통해 처리
+    // set({ currentSession: null, isConnected: false });
+    // get().addMessage({
+    //   type: 'system',
+    //   content: 'Disconnected from CLI'
+    // });
   },
 
   executeCommand: (command: string) => {
@@ -203,7 +233,7 @@ export const useREPLStore = create<REPLStore>((set, get) => ({
       timestamp: new Date(),
       ...messageData,
     };
-    
+
     set((state) => ({
       messages: [...state.messages, message],
     }));
